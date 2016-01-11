@@ -63,7 +63,7 @@ extendClearanceOnThentosSession tok = do
 -- * making unsafe actions safe
 
 unsafeLiftIO :: IO v -> Action e s v
-unsafeLiftIO = unsafeAction . liftIO
+unsafeLiftIO = liftLIO . ioTCB
 
 -- | Run an 'UnsafeAction' in a safe 'Action' with extra authorization checks (performed through
 -- 'assertAuth').
