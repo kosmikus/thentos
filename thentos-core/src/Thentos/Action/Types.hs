@@ -6,16 +6,19 @@
 {-# LANGUAGE MultiParamTypeClasses       #-}
 {-# LANGUAGE PackageImports              #-}
 {-# LANGUAGE TemplateHaskell             #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving  #-}
+{-# LANGUAGE StandaloneDeriving          #-}
+{-# LANGUAGE PatternSynonyms             #-}
 
 module Thentos.Action.Types where
 
 import Control.Concurrent (MVar)
 import Control.Exception (Exception, SomeException)
 import Control.Lens (makeLenses)
-import Control.Monad.Except (MonadError, throwError, catchError)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.Reader (ReaderT(ReaderT), MonadReader, ask, local)
-import Control.Monad.State (MonadState, StateT, state)
+import Control.Monad.Except (MonadError)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Reader (MonadReader, ReaderT(ReaderT))
+import Control.Monad.State (MonadState, StateT)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Either (EitherT(EitherT))
 import "cryptonite" Crypto.Random (ChaChaDRG)
@@ -51,33 +54,19 @@ makeLenses ''ActionState
 --     - An 'ActionState' in a reader.  The state can be used by actions for calls to 'LIO', which
 --       will have authorized effect.  Since it is contained in a reader, actions do not have the
 --       power to corrupt it.
-newtype Action e s a =
-    Action
-      { fromAction :: ReaderT ActionState
-                          (EitherT (ThentosError e)
-                              (StateT s
-                                  (LIO DCLabel))) a
-      }
-  deriving (Functor, Generic)
+newtype Action' m e s a = Action { fromAction :: ActionSyn m e s a }
+  deriving
+    ( Functor
+    , Generic
+    , Applicative
+    , Monad
+    , MonadReader ActionState
+    , MonadError (ThentosError e)
+    , MonadState s
+    )
 
-instance Applicative (Action e s) where
-    pure = Action . pure
-    (Action ua) <*> (Action ua') = Action $ ua <*> ua'
-
-instance Monad (Action e s) where
-    return = pure
-    (Action ua) >>= f = Action $ ua >>= fromAction . f
-
-instance MonadReader ActionState (Action e s) where
-    ask = Action ask
-    local f = Action . local f . fromAction
-
-instance MonadError (ThentosError e) (Action e s) where
-    throwError = Action . throwError
-    catchError (Action ua) h = Action $ catchError ua (fromAction . h)
-
-instance MonadState s (Action e s) where
-    state = Action . state
+type ActionSyn m e s a = ReaderT ActionState (EitherT (ThentosError e) (StateT s m)) a
+type Action = Action' (LIO DCLabel)
 
 instance MonadLIO DCLabel (Action e s) where
     liftLIO lio = Action . ReaderT $ \_ -> EitherT (Right <$> lift lio)
@@ -99,33 +88,13 @@ instance (Show e, Typeable e) => Exception (ActionError e)
 
 
 -- | Like 'Action', but with 'IO' at the base.
-newtype UnsafeAction e s a =
-    UnsafeAction
-      { fromUnsafeAction :: ReaderT ActionState
-                                (EitherT (ThentosError e)
-                                    (StateT s
-                                        IO)) a
-      }
-  deriving (Functor, Generic)
+type UnsafeAction = Action' IO
 
-instance Applicative (UnsafeAction e s) where
-    pure = UnsafeAction . pure
-    (UnsafeAction ua) <*> (UnsafeAction ua') = UnsafeAction $ ua <*> ua'
+pattern UnsafeAction ::
+  ReaderT ActionState (EitherT (ThentosError e) (StateT s IO)) a -> UnsafeAction e s a
+pattern UnsafeAction a = Action a
 
-instance Monad (UnsafeAction e s) where
-    return = pure
-    (UnsafeAction ua) >>= f = UnsafeAction $ ua >>= fromUnsafeAction . f
+fromUnsafeAction :: UnsafeAction e s a -> ActionSyn IO e s a
+fromUnsafeAction = fromAction
 
-instance MonadReader ActionState (UnsafeAction e s) where
-    ask = UnsafeAction ask
-    local f = UnsafeAction . local f . fromUnsafeAction
-
-instance MonadError (ThentosError e) (UnsafeAction e s) where
-    throwError = UnsafeAction . throwError
-    catchError (UnsafeAction ua) h = UnsafeAction $ catchError ua (fromUnsafeAction . h)
-
-instance MonadState s (UnsafeAction e s) where
-    state = UnsafeAction . state
-
-instance MonadIO (UnsafeAction e s) where
-    liftIO = UnsafeAction . liftIO
+deriving instance MonadIO (UnsafeAction e s)

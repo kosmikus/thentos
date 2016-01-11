@@ -12,9 +12,8 @@ import Control.Exception (throwIO, ErrorCall(..))
 import Control.Lens ((^.))
 import Control.Monad.Except (throwError, catchError)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (ReaderT(ReaderT), runReaderT, ask)
-import Control.Monad.State (StateT(StateT), runStateT)
-import Control.Monad.Trans.Either (EitherT(EitherT), runEitherT)
+import Control.Monad.Morph
+import Control.Monad.Reader (ask)
 import "cryptonite" Crypto.Random (ChaChaDRG, DRG(randomBytesGenerate))
 import Data.Configifier (Tagged(Tagged), (>>.))
 import Data.Pool (withResource)
@@ -73,19 +72,7 @@ guardedUnsafeAction utest uaction = assertAuth utest >> unsafeAction uaction
 
 -- | Run an 'UnsafeAction' in a safe 'Action' without extra authorization checks.
 unsafeAction :: forall e s a. UnsafeAction e s a -> Action e s a
-unsafeAction uaction = construct deconstruct
-  where
-    construct :: (s -> ActionState -> IO (Either (ThentosError e) a, s)) -> Action e s a
-    construct io = Action .
-        ReaderT $ \actionState ->
-            EitherT .
-                StateT $ \polyState ->
-                    ioTCB $ io polyState actionState
-
-    deconstruct :: s -> ActionState -> IO (Either (ThentosError e) a, s)
-    deconstruct polyState actionState =
-        runStateT (runEitherT (runReaderT (fromUnsafeAction uaction) actionState)) polyState
-
+unsafeAction = Action . hoist (hoist (hoist ioTCB)) . fromUnsafeAction
 
 -- * misc
 
