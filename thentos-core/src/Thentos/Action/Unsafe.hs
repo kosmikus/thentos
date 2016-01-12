@@ -81,8 +81,8 @@ query u = do
     ActionState _ _ connPool <- UnsafeAction ask
     liftIO (withResource connPool (`runThentosQuery` u)) >>= either throwError return
 
-getConfig :: UnsafeAction e s ThentosConfig
-getConfig = (^. aStConfig) <$> UnsafeAction ask
+getConfig :: Monad m => Action' m e s ThentosConfig
+getConfig = (^. aStConfig) <$> Action ask
 
 getCurrentTime :: UnsafeAction e s Timestamp
 getCurrentTime = Timestamp <$> liftIO Thyme.getCurrentTime
