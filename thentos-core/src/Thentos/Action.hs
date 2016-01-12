@@ -222,7 +222,7 @@ addUnconfirmedUser userData = do
 -- | Helper action: Send a confirmation mail to a newly registered user.
 sendUserConfirmationMail :: UserFormData -> ConfirmationToken -> Action e s ()
 sendUserConfirmationMail user (ConfirmationToken confToken) = do
-    cfg <- U.unsafeAction U.getConfig
+    cfg <- U.getConfig
     let subject = cfg >>. (Proxy :: Proxy '["email_templates", "account_verification", "subject"])
         bodyTemplate = cfg >>. (Proxy :: Proxy '["email_templates", "account_verification", "body"])
         feHttp = case cfg >>. (Proxy :: Proxy '["frontend"]) of
@@ -237,7 +237,7 @@ sendUserConfirmationMail user (ConfirmationToken confToken) = do
 -- | Helper action: Send a confirmation mail to a newly registered user.
 sendUserExistsMail :: UserEmail -> Action e s ()
 sendUserExistsMail email = do
-    cfg <- U.unsafeAction U.getConfig
+    cfg <- U.getConfig
     let subject = cfg >>. (Proxy :: Proxy '["email_templates", "user_exists", "subject"])
         body    = cfg >>. (Proxy :: Proxy '["email_templates", "user_exists", "body"])
     U.unsafeAction $ U.sendMail Nothing email subject body
@@ -264,7 +264,7 @@ addUnconfirmedUserWithCaptcha ucr = do
 -- See also: 'addUnconfirmedUser'.
 confirmNewUser :: ConfirmationToken -> Action e s (UserId, ThentosSessionToken)
 confirmNewUser token = do
-    expiryPeriod <- (>>. (Proxy :: Proxy '["user_reg_expiration"])) <$> U.unsafeAction U.getConfig
+    expiryPeriod <- (>>. (Proxy :: Proxy '["user_reg_expiration"])) <$> U.getConfig
     uid <- queryA $ T.finishUserRegistration expiryPeriod token
     sessionToken <- startThentosSessionByAgent_ (UserA uid)
     return (uid, sessionToken)
@@ -284,7 +284,7 @@ addPasswordResetToken email = do
 -- SECURITY: See 'confirmNewUser'.
 resetPassword :: PasswordResetToken -> UserPass -> Action e s ()
 resetPassword token password = do
-    expiryPeriod <- (>>. (Proxy :: Proxy '["pw_reset_expiration"])) <$> U.unsafeAction U.getConfig
+    expiryPeriod <- (>>. (Proxy :: Proxy '["pw_reset_expiration"])) <$> U.getConfig
     hashedPassword <- U.unsafeAction $ U.hashUserPass password
     queryA $ T.resetPassword expiryPeriod token hashedPassword
 
@@ -358,7 +358,7 @@ requestUserEmailChange uid newEmail callbackUrlBuilder = do
 -- only token secrecy.
 confirmUserEmailChange :: ConfirmationToken -> Action e s ()
 confirmUserEmailChange token = do
-    expiryPeriod <- (>>. (Proxy :: Proxy '["email_change_expiration"])) <$> U.unsafeAction U.getConfig
+    expiryPeriod <- (>>. (Proxy :: Proxy '["email_change_expiration"])) <$> U.getConfig
     void . queryA $ T.confirmUserEmailChange expiryPeriod token
 
 
@@ -742,7 +742,7 @@ collectGarbage = do
     queryA T.garbageCollectThentosSessions
     queryA T.garbageCollectServiceSessions
 
-    config <- U.unsafeAction U.getConfig
+    config <- U.getConfig
     let userExpiry     = config >>. (Proxy :: Proxy '["user_reg_expiration"])
         passwordExpiry = config >>. (Proxy :: Proxy '["pw_reset_expiration"])
         emailExpiry    = config >>. (Proxy :: Proxy '["email_change_expiration"])
