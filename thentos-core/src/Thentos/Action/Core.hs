@@ -1,6 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses       #-}
 {-# LANGUAGE ScopedTypeVariables         #-}
-{-# LANGUAGE TypeFamilies                #-}
 
 module Thentos.Action.Core
 where
